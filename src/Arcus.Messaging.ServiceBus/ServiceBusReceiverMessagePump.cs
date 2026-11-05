@@ -81,7 +81,7 @@ namespace Arcus.Messaging.Pumps.ServiceBus
                 {
                     try
                     {
-                        await RemoveCompletedMessageProcessingTasks(messageProcessingTasks);
+                        await RemoveCompletedMessageProcessingTasksAsync(messageProcessingTasks);
 
                         while (messageProcessingTasks.Count >= Options.MaxMessagesPerBatch &&
                                CircuitState.IsClosed)
@@ -90,7 +90,7 @@ namespace Arcus.Messaging.Pumps.ServiceBus
                             // to complete.  As soon as one (ore more) messages are processed, we can receive new
                             // messages to fill up the empty slots.
                             await Task.WhenAny(messageProcessingTasks).WaitAsync(cancellationToken);
-                            await RemoveCompletedMessageProcessingTasks(messageProcessingTasks);
+                            await RemoveCompletedMessageProcessingTasksAsync(messageProcessingTasks);
                         }
 
                         IReadOnlyList<ServiceBusReceivedMessage> messages = Array.Empty<ServiceBusReceivedMessage>();
@@ -141,7 +141,7 @@ namespace Arcus.Messaging.Pumps.ServiceBus
             }
         }
 
-        private async Task RemoveCompletedMessageProcessingTasks(List<Task> messageProcessingTasks)
+        private async Task RemoveCompletedMessageProcessingTasksAsync(List<Task> messageProcessingTasks)
         {
             List<Task> completed = null;
 
