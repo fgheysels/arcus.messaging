@@ -23,7 +23,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             CircuitBreakerStateMachine machine = CreateStateMachine();
 
             // Act / Assert
-            Assert.True(machine.Current.IsClosed);
+            Assert.True(machine.Current.IsClosed, "The circuit breaker should be Closed by default.");
         }
 
         [Fact]
@@ -37,8 +37,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryOpen(options);
 
             // Assert
-            Assert.True(isTransitioned);
-            Assert.True(machine.Current.IsOpen);
+            Assert.True(isTransitioned, $"The circuit breaker should have transitioned to another {nameof(MessagePumpCircuitState)}.");
+            Assert.True(machine.Current.IsOpen, "The circuit breaker should be Open.");
             Assert.Same(options, machine.Current.Options);
         }
 
@@ -54,8 +54,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryOpen(new MessagePumpCircuitBreakerOptions());
 
             // Assert
-            Assert.False(isTransitioned);
-            Assert.True(machine.Current.IsOpen);
+            Assert.False(isTransitioned, $"The circuit breaker should not have transitioned to another {nameof(MessagePumpCircuitState)}.");
+            Assert.True(machine.Current.IsOpen, "The circuit breaker should be Open.");
             Assert.Same(original, machine.Current.Options);
         }
 
@@ -71,8 +71,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryOpen(new MessagePumpCircuitBreakerOptions());
 
             // Assert
-            Assert.False(isTransitioned);
-            Assert.True(machine.Current.IsHalfOpen);
+            Assert.False(isTransitioned, $"The circuit breaker cannot transition from HalfOpen to Open.");
+            Assert.True(machine.Current.IsHalfOpen, "The circuit breaker should remain in HalfOpen state.");
         }
 
         [Fact]
@@ -87,8 +87,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryHalfOpen();
 
             // Assert
-            Assert.True(isTransitioned);
-            Assert.True(machine.Current.IsHalfOpen);
+            Assert.True(isTransitioned, $"The circuit breaker should have transitioned to another {nameof(MessagePumpCircuitState)}.");
+            Assert.True(machine.Current.IsHalfOpen, "The circuit breaker should be HalfOpen.");
             Assert.Same(options, machine.Current.Options);
         }
 
@@ -102,8 +102,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryHalfOpen();
 
             // Assert
-            Assert.False(isTransitioned);
-            Assert.True(machine.Current.IsClosed);
+            Assert.False(isTransitioned, $"The circuit breaker cannot transition from Closed to HalfOpen.");
+            Assert.True(machine.Current.IsClosed, "The circuit breaker should be Closed.");
         }
 
         [Fact]
@@ -118,8 +118,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryHalfOpen();
 
             // Assert
-            Assert.False(isTransitioned);
-            Assert.True(machine.Current.IsHalfOpen);
+            Assert.False(isTransitioned, "When the current state is HalfOpen, a change to HalfOpen should not be considered as a transition.");
+            Assert.True(machine.Current.IsHalfOpen, "The circuit breaker should remain in HalfOpen state.");
         }
 
         [Fact]
@@ -134,8 +134,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryClose();
 
             // Assert
-            Assert.True(isTransitioned);
-            Assert.True(machine.Current.IsClosed);
+            Assert.True(isTransitioned, "The circuit breaker should have transitioned from Open to Closed.");
+            Assert.True(machine.Current.IsClosed, "The circuit breaker should be Closed.");
             Assert.NotSame(options, machine.Current.Options);
         }
 
@@ -151,8 +151,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryClose();
 
             // Assert
-            Assert.True(isTransitioned);
-            Assert.True(machine.Current.IsClosed);
+            Assert.True(isTransitioned, "The circuit breaker should have transitioned from HalfOpen to Closed.");
+            Assert.True(machine.Current.IsClosed, "The circuit breaker should be Closed.");
         }
 
         [Fact]
@@ -165,8 +165,8 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             bool isTransitioned = machine.TryClose();
 
             // Assert
-            Assert.False(isTransitioned);
-            Assert.True(machine.Current.IsClosed);
+            Assert.False(isTransitioned, "When the current state is Closed, a change to Closed should not be considered as a transition.");
+            Assert.True(machine.Current.IsClosed, "The circuit breaker should be Closed.");
         }
 
         [Fact]
@@ -179,7 +179,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             machine.MarkPumpStopped();
 
             // Assert
-            Assert.True(machine.Current.IsOpen);
+            Assert.True(machine.Current.IsOpen, "When the pump is marked as 'stopped', the circuit breaker should be Open.");
         }
 
         [Fact]
@@ -193,7 +193,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             machine.MarkPumpStarted();
 
             // Assert
-            Assert.True(machine.Current.IsClosed);
+            Assert.True(machine.Current.IsClosed, "When the pump is marked as 'started', the circuit breaker should be Closed.");
         }
 
         [Fact]
@@ -242,7 +242,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             machine.TryClose();
 
             // Assert
-            await Task.Delay(NotificationSettleTime);
+            await Task.Delay(NotificationSettleTime, TestContext.Current.CancellationToken);
             Assert.Empty(handler.Transitions);
         }
 
@@ -259,7 +259,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
 
             // Assert
             Assert.Equal(1, results.Count(isTransitioned => isTransitioned));
-            Assert.True(machine.Current.IsOpen);
+            Assert.True(machine.Current.IsOpen, "The circuit breaker should be Open.");
             Assert.Contains(machine.Current.Options, options);
         }
 
