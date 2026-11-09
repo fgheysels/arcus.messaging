@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Arcus.Messaging.Pumps.Abstractions.Resiliency;
 using Arcus.Messaging.ServiceBus;
 using Arcus.Messaging.Tests.Core.Messages.v1;
+using Arcus.Testing;
 using Microsoft.Extensions.Logging;
 
 namespace Arcus.Messaging.Tests.Unit.MessagePump.Fixture
@@ -92,10 +93,12 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump.Fixture
         /// <exception cref="TimeoutException">Thrown when not enough messages were processed within the <paramref name="timeout"/>.</exception>
         public Task ShouldProcessAtLeastAsync(int count, TimeSpan timeout)
         {
-            return Wait.UntilAsync(
-                () => _processedMessageIds.Count >= count,
-                timeout,
-                () => $"message pump should have processed at least {count} message(s) within {timeout:g}, but only processed {_processedMessageIds.Count}");
+            return Poll.Target(() => _processedMessageIds)
+                       .Every(TimeSpan.FromMilliseconds(25))
+                       .Timeout(timeout)
+                       .Until(ids => ids.Count >= count)                                
+                       .FailWith($"message pump should have processed at least {count} message(s) within {timeout:g}, but only processed {_processedMessageIds.Count}")
+                       .StartAsync();
         }
 
         /// <summary>
@@ -104,10 +107,12 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump.Fixture
         /// <exception cref="TimeoutException">Thrown when not enough processing attempts failed within the <paramref name="timeout"/>.</exception>
         public Task ShouldFailAtLeastAsync(int count, TimeSpan timeout)
         {
-            return Wait.UntilAsync(
-                () => FailureCount >= count,
-                timeout,
-                () => $"message pump should have retried the message at least {count} time(s) within {timeout:g} while the dependency system was unavailable, but only retried {FailureCount} time(s)");
+            return Poll.Target(() => FailureCount)
+                       .Every(TimeSpan.FromMilliseconds(25))
+                       .Timeout(timeout)
+                       .Until(failures => failures >= count)
+                       .FailWith($"message pump should have retried the message at least {count} time(s) within {timeout:g} while the dependency system was unavailable, but only retried {FailureCount} time(s)")
+                       .StartAsync();            
         }
 
         private static void TrackMaximum(ref int target, int value)
@@ -125,38 +130,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump.Fixture
             }
         }
     }
-
-    /// <summary>
-    /// Provides a way to wait for asynchronous message pump activity to settle.
-    /// </summary>
-    public static class Wait
-    {
-        private static readonly TimeSpan PollingInterval = TimeSpan.FromMilliseconds(25);
-
-        /// <summary>
-        /// Polls until the <paramref name="untilTrue"/> condition is met, failing with the <paramref name="createFailureMessage"/> upon timeout.
-        /// </summary>
-        /// <exception cref="TimeoutException">Thrown when the condition was not met within the <paramref name="timeout"/>.</exception>
-        public static async Task UntilAsync(Func<bool> untilTrue, TimeSpan timeout, Func<string> createFailureMessage)
-        {
-            var watch = Stopwatch.StartNew();
-            while (watch.Elapsed < timeout)
-            {
-                if (untilTrue())
-                {
-                    return;
-                }
-
-                await Task.Delay(PollingInterval);
-            }
-
-            if (!untilTrue())
-            {
-                throw new TimeoutException(createFailureMessage());
-            }
-        }
-    }
-
+    
     /// <summary>
     /// Represents an <see cref="IServiceBusMessageHandler{TMessage}"/> implementation that records its processing in a <see cref="MessageProcessingSpy"/>.
     /// </summary>

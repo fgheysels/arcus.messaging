@@ -5,6 +5,7 @@ using Arcus.Messaging.Abstractions.ServiceBus.MessageHandling;
 using Arcus.Messaging.Pumps.Abstractions.Resiliency;
 using Arcus.Messaging.ServiceBus.Resiliency;
 using Arcus.Messaging.Tests.Unit.MessagePump.Fixture;
+using Arcus.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -216,11 +217,13 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             machine.TryClose();
 
             // Assert
-            await Wait.UntilAsync(
-                () => matchingHandler.Transitions.Count >= 3,
-                NotificationTimeout,
-                () => $"circuit breaker should have notified 3 transitions, but notified: {string.Join(", ", matchingHandler.Transitions)}");
-
+            await Poll.Target(async () => await Task.FromResult(matchingHandler.Transitions.Count))
+                .Until(numberOfTransitions => numberOfTransitions >= 3)
+                .Every(TimeSpan.FromMilliseconds(25))
+                .Timeout(NotificationTimeout)
+                .FailWith($"circuit breaker should have notified 3 transitions, but notified: {string.Join(", ", matchingHandler.Transitions)}")
+                .StartAsync();
+            
             // The handlers are notified in the background, so only the set of transitions is deterministic - not their order.
             Assert.Contains("Closed->Open", matchingHandler.Transitions);
             Assert.Contains("Open->HalfOpen", matchingHandler.Transitions);

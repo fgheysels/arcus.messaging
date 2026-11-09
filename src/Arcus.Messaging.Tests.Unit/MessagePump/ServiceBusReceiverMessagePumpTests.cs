@@ -8,6 +8,7 @@ using Arcus.Messaging.Pumps.ServiceBus.Configuration;
 using Arcus.Messaging.Tests.Core.Generators;
 using Arcus.Messaging.Tests.Core.Messages.v1;
 using Arcus.Messaging.Tests.Unit.MessagePump.Fixture;
+using Arcus.Testing;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -43,10 +44,12 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             await host.StartAsync();
 
             // Assert
-            await Wait.UntilAsync(
-                () => !host.CircuitBreakerState.IsClosed,
-                PumpActivityTimeout,
-                () => "circuit should have opened because the dependency system is unavailable, but remained closed");
+            await Poll.Target(() => Task.FromResult(host.CircuitBreakerState))
+                      .Every(TimeSpan.FromMilliseconds(25))
+                      .Timeout(PumpActivityTimeout)
+                      .Until(circuitBreakerState => circuitBreakerState.IsClosed == false)
+                      .FailWith("circuit should have opened because the dependency system is unavailable, but remained closed")
+                      .StartAsync();
 
             // While the dependency stays unavailable, the pump should keep retrying single messages without ever processing one.
             await spy.ShouldFailAtLeastAsync(3, PumpActivityTimeout);
@@ -82,11 +85,13 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
 
             await spy.ShouldProcessAtLeastAsync(1, PumpActivityTimeout);
 
-            await Wait.UntilAsync(
-                () => transitions.Transitions.Count >= 3,
-                PumpActivityTimeout,
-                () => $"circuit breaker should have notified the transition back to a closed circuit, but only notified: {string.Join(", ", transitions.Transitions)}");
-
+            await Poll.Target(() => transitions.Transitions)
+                      .Every(TimeSpan.FromMilliseconds(25))
+                      .Timeout(PumpActivityTimeout)
+                      .Until(transitionsList => transitionsList.Count >= 3)
+                      .FailWith($"circuit breaker should have notified the transition back to a closed circuit, but only notified: {string.Join(", ", transitions.Transitions)}")
+                      .StartAsync();
+            
             // The event handlers are notified in the background, so only the set of transitions is deterministic - not their order.
             Assert.Contains("Closed->Open", transitions.Transitions);
             Assert.Contains("Open->HalfOpen", transitions.Transitions);
@@ -147,11 +152,12 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             await host.StartAsync();
 
             // Assert
-            await Wait.UntilAsync(
-                () => receiver.MessageIdsOfBatch(2).Count > 0
-                      && receiver.MessageIdsOfBatch(2).All(receiver.AbandonedMessageIds.Contains),
-                PumpActivityTimeout,
-                () => $"message pump should have abandoned the messages [{string.Join(", ", receiver.MessageIdsOfBatch(2))}] that were received while the circuit was open, but only abandoned [{string.Join(", ", receiver.AbandonedMessageIds)}]");
+            await Poll.Target(()=> receiver.MessageIdsOfBatch(2))
+                      .Every(TimeSpan.FromMilliseconds(25))
+                      .Timeout(PumpActivityTimeout)
+                      .Until(messageIds => messageIds.Count > 0 && messageIds.All(receiver.AbandonedMessageIds.Contains))
+                      .FailWith($"message pump should have abandoned the messages [{string.Join(", ", receiver.MessageIdsOfBatch(2))}] that were received while the circuit was open, but only abandoned [{string.Join(", ", receiver.AbandonedMessageIds)}]")
+                      .StartAsync();
 
             Assert.NotEmpty(receiver.MessageIdsOfBatch(2));
             Assert.All(receiver.MessageIdsOfBatch(2), messageId => Assert.Contains(messageId, receiver.AbandonedMessageIds));
@@ -216,10 +222,13 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
 
             // Releasing the blocked handler lets the remaining message of the first batch complete as well.
             blockedHandler.SetResult();
-            await Wait.UntilAsync(
-                () => receiver.MessageIdsOfBatch(1).All(receiver.CompletedMessageIds.Contains),
-                PumpActivityTimeout,
-                () => $"message pump should have completed the blocked message of the first batch after it was released, but only completed [{string.Join(", ", receiver.CompletedMessageIds)}]");
+
+            await Poll.Target(() => receiver.MessageIdsOfBatch(1))
+                      .Every(TimeSpan.FromMilliseconds(25))
+                      .Timeout(PumpActivityTimeout)
+                      .Until(messageIds => messageIds.Count > 0 && messageIds.All(receiver.CompletedMessageIds.Contains))
+                      .FailWith($"message pump should have completed the blocked message of the first batch after it was released, but only completed [{string.Join(", ", receiver.CompletedMessageIds)}]")
+                      .StartAsync();
         }
 
         [Fact]
