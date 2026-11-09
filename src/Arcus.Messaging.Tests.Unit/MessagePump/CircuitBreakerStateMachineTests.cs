@@ -7,6 +7,7 @@ using Arcus.Messaging.ServiceBus.Resiliency;
 using Arcus.Messaging.Tests.Unit.MessagePump.Fixture;
 using Arcus.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -16,6 +17,13 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
     {
         private static readonly TimeSpan NotificationTimeout = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan NotificationSettleTime = TimeSpan.FromMilliseconds(250);
+
+        private readonly ILogger _testLogger;
+
+        public CircuitBreakerStateMachineTests(ITestOutputHelper outputWriter)
+        {
+            _testLogger = new XunitTestLogger(outputWriter);
+        }
 
         [Fact]
         public void Current_WithoutAnyTransition_IsClosed()
@@ -209,7 +217,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
                 (jobId, matchingHandler),
                 ($"job-{Guid.NewGuid()}", otherHandler));
 
-            var machine = new CircuitBreakerStateMachine(jobId, provider, NullLogger.Instance);
+            var machine = new CircuitBreakerStateMachine(jobId, provider, _testLogger);
 
             // Act
             machine.TryOpen(new MessagePumpCircuitBreakerOptions());
@@ -223,7 +231,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
                 .Timeout(NotificationTimeout)
                 .FailWith($"circuit breaker should have notified 3 transitions, but notified: {string.Join(", ", matchingHandler.Transitions)}")
                 .StartAsync();
-            
+
             // The handlers are notified in the background, so only the set of transitions is deterministic - not their order.
             Assert.Contains("Closed->Open", matchingHandler.Transitions);
             Assert.Contains("Open->HalfOpen", matchingHandler.Transitions);
@@ -238,7 +246,7 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             var jobId = $"job-{Guid.NewGuid()}";
             var handler = new CircuitBreakerTransitionSpy();
 
-            var machine = new CircuitBreakerStateMachine(jobId, CreateServiceProvider((jobId, handler)), NullLogger.Instance);
+            var machine = new CircuitBreakerStateMachine(jobId, CreateServiceProvider((jobId, handler)), _testLogger);
 
             // Act
             machine.TryHalfOpen();
@@ -266,12 +274,12 @@ namespace Arcus.Messaging.Tests.Unit.MessagePump
             Assert.Contains(machine.Current.Options, options);
         }
 
-        private static CircuitBreakerStateMachine CreateStateMachine()
+        private CircuitBreakerStateMachine CreateStateMachine()
         {
             return new CircuitBreakerStateMachine(
                 $"job-{Guid.NewGuid()}",
                 new ServiceCollection().BuildServiceProvider(),
-                NullLogger.Instance);
+                _testLogger);
         }
 
         private static IServiceProvider CreateServiceProvider(params (string jobId, ICircuitBreakerEventHandler handler)[] registrations)
